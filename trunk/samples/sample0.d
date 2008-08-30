@@ -1,21 +1,40 @@
-import lunea.core.Process;
+debug = DebugProcess;
 
-class MainProcess : Process {
-	this() {
-		debug (DebugProcess) Stdout.formatln("MainProcess.this();");
-		currentProcess = this;
-		super();
+import lunea.core.Core;
+import lunea.drivers.d2d.Driver;
+
+mixin ProgramMain;
+
+class Bullet : Process {
+	void main() {
+		x = 100;
+		while (true) {
+			x--;
+			if (x <= 0) break;
+			frame;
+		}
 	}
 
-	bool execute() {
-		Process.lastProcess = this;
-		Process.currentProcess = this;	
-		return Process.execute();
+	void drawProcess() {
+		Stdout.formatln("{}", x);
+	}
+}
+
+class Program : Process {
+	void main() {
+		Stdout.formatln("Program");
+		Display.set();
+		new Test(1000);
+		while (true) {
+			if (Keyboard[SDLK_ESCAPE]) exit();
+			if (Keyboard[SDLK_LEFT]) new Bullet();
+			frame;
+		}
 	}
 	
-	override void drawProcess()  { }
-	
-	void main() { while (true) frame(); }
+	void drawProcess() {
+		Stdout.formatln("{}, {}, {}", Mouse.x, Mouse.y, Mouse.b);
+	}
 }
 
 class Test : Process {
@@ -28,6 +47,7 @@ class Test : Process {
 	void drawProcess() { Stdout.formatln("{}", n); }
 	
 	void main() {
+		Stdout.formatln("test.main");
 		action = &left;
 	}
 	
@@ -45,24 +65,5 @@ class Test : Process {
 			if (n >= +max) action = &left;
 			frame();
 		}
-	}
-}
-
-real distance(Process a, Process b) {
-	return hypot(a.x - b.x, a.y - b.y); 
-}
-
-bool collide(Process a, Process b) {
-	return false;
-}
-
-void main() {
-	auto p = new MainProcess();
-	new Test(100);
-	//new Test(2000);
-	
-	while (true) {
-		if (!p.execute()) break;
-		p.draw();
 	}
 }

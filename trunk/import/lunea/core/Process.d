@@ -4,10 +4,12 @@ public import tango.core.Thread;
 public import tango.math.Math;
 public import tango.io.Stdout;
 
-debug = DebugProcess;
-
 interface IDrawable {
-	void draw(real x = 0, real y = 0, real z = 0);
+	void draw(Process p);
+}
+
+class ExceptionExitRequest : Exception {
+	this() { super(""); }
 }
 
 abstract class Process {
@@ -18,6 +20,7 @@ abstract class Process {
 	Fiber fiber;
 	int priority;
 	real x = 0, y = 0, z = 0;
+	real angle = 0, size = 1;
 	IDrawable graph;
 	bool doExecute = true;
 	bool doDraw = true;
@@ -40,7 +43,7 @@ abstract class Process {
 	Process parentDraw() { return _parentDraw; }
 	Process parentDraw(Process parent) {
 		if (_parentDraw) _parentDraw.childsDraw.remove(this);
-		if (parent == this) return _parentExecute = null;
+		if (parent == this) return _parentDraw = null;
 		parent.childsDraw[this] = true;
 		return _parentDraw = parent;
 	}
@@ -50,10 +53,11 @@ abstract class Process {
 	
 	private Action _action;
 	Action action() { return _action; }
-	Action action(Action _action, bool doFrame = true) {
+	Action action(Action _action) {
 		auto b = fiber;
-		fiber = new Fiber(this._action = _action);
-		if (b && currentProcess is this && doFrame) frame();
+		fiber = new Fiber(this._action = _action, 32 * 1024);
+		
+		if (b && (Fiber.getThis is b)) frame;
 		return _action;
 	}
 	
@@ -61,12 +65,12 @@ abstract class Process {
 	real screenY() { return parentDraw ? (y + parentDraw.y) : y; }
 	real screenZ() { return parentDraw ? (z + parentDraw.z) : z; }
 	
-	this() {
+	this(Process _parentExecute = null, Process _parentDraw = null) {
 		debug (DebugProcess) Stdout.formatln("Process.this();");
-		action(&main, false);
+		action = &main;
 		
-		parentExecute = currentProcess.parentExecute ? currentProcess.parentExecute : currentProcess;
-		parentDraw = currentProcess.parentDraw ? currentProcess.parentDraw : currentProcess;
+		parentExecute = _parentExecute ? _parentExecute : (currentProcess.parentExecute ? currentProcess.parentExecute : currentProcess);
+		parentDraw = _parentDraw ? _parentDraw : (currentProcess.parentDraw ? currentProcess.parentDraw : currentProcess);
 	}
 	
 	void dispose() {
@@ -80,22 +84,24 @@ abstract class Process {
 	void executeAfter () { }
 
 	bool execute() {
+		//Stdout.formatln("execute");
+		
 		if (fiber.state == Fiber.State.TERM) return false;
 		if (!doExecute) return true;
 
 		currentProcess = this;
 		
-		try { fiber.call(); } catch (Exception e) { Stdout.formatln("Process Execution Exception (executeProcess): {}", e); }
+		try { fiber.call(); } catch (Exception e) { Stdout.formatln("Process Execution Exception (executeProcess): {}:{}", this, e); }
 
 		if (childsExecute.length) {
 			lastProcess = this;
 		
-			try { executeBefore(); } catch (Exception e) { Stdout.formatln("Process Execution Exception (executeBefore): {}", e); }
+			try { executeBefore(); } catch (Exception e) { Stdout.formatln("Process Execution Exception (executeBefore): {}:{}", this, e); }
 			foreach (child; getChildsExecute) {
-				child.execute();
+				if (this != child) child.execute();
 				if (child.fiber.state == Fiber.State.TERM) child.dispose();
 			}
-			try { executeAfter(); }catch (Exception e) { Stdout.formatln("Process Execution Exception (executeAfter): {}", e); }
+			try { executeAfter(); }catch (Exception e) { Stdout.formatln("Process Execution Exception (executeAfter): {}:{}", this, e); }
 		}
 		
 		return true;
@@ -107,18 +113,18 @@ abstract class Process {
 	void drawAfter  () { }
 	void drawProcess() {
 		debug (DebugProcess) Stdout.formatln("Process({}, {}, {})", screenX, screenY, screenZ);
-		if (graph) graph.draw(screenX, screenY, screenZ);
+		if (graph) graph.draw(this);
 	}
 	
 	void draw() {
 		if (!doDraw) return;
 		
-		try { drawProcess(); } catch (Exception e) { Stdout.formatln("Process Drawing Exception (drawProcess) : {}", e); }
+		try { drawProcess(); } catch (Exception e) { Stdout.formatln("Process Drawing Exception (drawProcess) : {}:{}", this, e); }
 		
 		if (childsDraw.length) {
-			try { drawBefore(); } catch (Exception e) { Stdout.formatln("Process Drawing Exception (drawBefore) : {}", e); }
+			try { drawBefore(); } catch (Exception e) { Stdout.formatln("Process Drawing Exception (drawBefore) : {}:{}", this, e); }
 			foreach (child; getChildsDraw) child.draw();
-			try { drawAfter(); } catch (Exception e) { Stdout.formatln("Process Drawing Exception (drawAfter) : {}", e); }
+			try { drawAfter(); } catch (Exception e) { Stdout.formatln("Process Drawing Exception (drawAfter) : {}:{}", this, e); }
 		}
 	}
 	
